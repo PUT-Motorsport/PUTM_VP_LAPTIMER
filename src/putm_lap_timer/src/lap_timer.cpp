@@ -15,7 +15,7 @@ public:
     {
         gps_sub_ = this->create_subscription<sensor_msgs::msg::NavSatFix>(
             "/vectornav/gnss", 50, std::bind(&LapTimer::gps_callback, this, std::placeholders::_1));
-        lap_timer_pub_ = this->create_publisher<std_msgs::msg::Float32>("/putm_vcl/lap_timer", 50);
+        lap_timer_pub_ = this->create_publisher<std_msgs::msg::Float32>("/putm_vcl/lap_timer/delta", 50);
         timer_ = this->create_wall_timer(
             20ms, std::bind(&LapTimer::lap_timer_callback, this));
     }
@@ -193,7 +193,7 @@ private:
     void lap_timer_callback()
     {
         auto message = std_msgs::msg::Float32();
-        message.data = 32.0;
+        message.data = delta_time;
         lap_timer_pub_->publish(message);
     }
 };
