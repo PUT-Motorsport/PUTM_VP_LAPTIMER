@@ -2,9 +2,9 @@
 #include "sensor_msgs/msg/nav_sat_fix.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/float32.hpp"
+#include "geometry_msgs/msg/vector3.hpp"
 #include <cmath>
 #include <chrono>
-
 
 using namespace std::chrono_literals;
 
@@ -27,6 +27,7 @@ private:
 
     double last_lat, last_lon;
     rclcpp::Time last_lap_time;
+    rclcpp::Time best_lap_time_start, best_lap_time_end;
     double total_distance;
     double sector_lat, sector_lon;
     int sector_number = 0;
@@ -41,12 +42,13 @@ private:
     const double LAP_DISTANCE = 10.0; // Okrążenie co 75m
     const double DELTA_DISTANCE = 0.5;
 
-    
-    struct Sector {
+    struct Sector
+    {
         double lat, lon, time;
     };
 
     std::vector<Sector> reference_lap;
+    std::vector<Sector> best_lap;
     bool is_first_lap = true;
 
     bool active = false;
@@ -94,7 +96,6 @@ private:
 
         // Tryb 1: Wykrywanie przejazdu przez linię start/meta
         double distance = haversineDistance(current_lat, current_lon, START_LAT, START_LON);
-        double sector_distance = haversineDistance(current_lat, current_lon, sector_lat, sector_lon);
 
         if (distance < 1.4)
         {
@@ -109,14 +110,33 @@ private:
                 {
                     closest = distance;
                 }
-                else if(!acc)
+                else if (!acc)
                 {
                     if (last_lap_time.nanoseconds() != 0)
                     { // Pomijamy pierwszy pomiar
-                        RCLCPP_INFO(this->get_logger(), "Okrążenie: %d Czas: %.2f s", lap_count, (now - last_lap_time).seconds());
+                        RCLCPP_INFO(this->get_logger(), "Okrążenie: %d Czas: %.3f s", lap_count, (now - last_lap_time).seconds());
                     }
                     lap_count++;
                     sector_number = 0; // Resetujemy licznik sektora
+                    
+                    switch (lap_count)
+                    {
+                    case 1:
+                        best_lap_time_start = now;
+                        break;
+                    case 2:
+                        best_lap_time_end = now;
+                        best_lap = reference_lap;
+                        break;
+                    
+                    default:
+                        if ((best_lap_time_end - best_lap_time_start).seconds() - (now - last_lap_time).seconds() > 0){
+                            best_lap_time_start = last_lap_time;
+                            best_lap_time_end = now;
+                            best_lap = reference_lap;
+                        }   
+                        break;
+                    }
                     last_lap_time = now;
                     active = true;
                     acc = true;
@@ -140,15 +160,15 @@ private:
         }
         else
         {
-            if (!reference_lap.empty())
+            if (!best_lap.empty())
             {
                 double min_distance = 10.0;
                 int closest_index = -1;
 
                 // Znajdź najbliższy punkt referencyjny
-                for (size_t i = 0; i < reference_lap.size(); i++)
+                for (size_t i = 0; i < best_lap.size(); i++)
                 {
-                    double d = haversineDistance(current_lat, current_lon, reference_lap[i].lat, reference_lap[i].lon);
+                    double d = haversineDistance(current_lat, current_lon, best_lap[i].lat, best_lap[i].lon);
                     if (d < min_distance)
                     {
                         min_distance = d;
@@ -160,7 +180,7 @@ private:
                 if (closest_index != -1)
                 {
                     double sector_time = (now - last_lap_time).seconds();
-                    delta_time = sector_time - reference_lap[closest_index].time;
+                    delta_time = sector_time - best_lap[closest_index].time;
 
                     RCLCPP_INFO(this->get_logger(), "Delta: %.3f s", delta_time);
                 }
@@ -170,7 +190,8 @@ private:
         last_lat = current_lat;
         last_lon = current_lon;
     }
-    void lap_timer_callback(){
+    void lap_timer_callback()
+    {
         auto message = std_msgs::msg::Float32();
         message.data = 32.0;
         lap_timer_pub_->publish(message);

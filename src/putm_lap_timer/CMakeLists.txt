@@ -10,6 +10,7 @@ find_package(ament_cmake REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 
 add_executable(lap_timer src/lap_timer.cpp)
 ament_target_dependencies(lap_timer rclcpp std_msgs sensor_msgs)
