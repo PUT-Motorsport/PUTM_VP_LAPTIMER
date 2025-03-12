@@ -6,99 +6,137 @@
 #include <cmath>
 #include <chrono>
 
+// Use the chrono_literals namespace for easier time manipulation
 using namespace std::chrono_literals;
 
+// Define the LapTimer class, which inherits from rclcpp::Node
 class LapTimer : public rclcpp::Node
 {
 public:
+    // Constructor for the LapTimer class
     LapTimer() : Node("lap_timer"), last_lat(0.0), last_lon(0.0), last_lap_time(0), total_distance(0.0)
     {
+        // Create a subscription to the "/vectornav/gnss" topic with a QoS of 50
         gps_sub_ = this->create_subscription<sensor_msgs::msg::NavSatFix>(
             "/vectornav/gnss", 50, std::bind(&LapTimer::gps_callback, this, std::placeholders::_1));
-        lap_timer_pub_ = this->create_publisher<std_msgs::msg::Float32>("/putm_vcl/lap_timer/delta", 50);
+
+        // Create publishers for the lap timer delta and time
+        lap_timer_delta_pub_ = this->create_publisher<std_msgs::msg::Float32>("/putm_vcl/lap_timer/delta", 50);
+        lap_timer_time_pub_ = this->create_publisher<geometry_msgs::msg::Vector3>("/putm_vcl/lap_timer/time", 50);
+
+        // Create a timer that triggers every 20 milliseconds
         timer_ = this->create_wall_timer(
             20ms, std::bind(&LapTimer::lap_timer_callback, this));
     }
 
 private:
+    // Timer object
     rclcpp::TimerBase::SharedPtr timer_;
-    rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr gps_sub_;
-    rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr lap_timer_pub_;
 
+    // Subscription to the GPS topic
+    rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr gps_sub_;
+
+    // Publishers for the lap timer delta and time
+    rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr lap_timer_delta_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::Vector3>::SharedPtr lap_timer_time_pub_;
+
+    // Last known latitude and longitude
     double last_lat, last_lon;
+
+    // Last lap time
     rclcpp::Time last_lap_time;
+
+    // Best lap time start and end
     rclcpp::Time best_lap_time_start, best_lap_time_end;
+
+    // Total distance traveled
     double total_distance;
+
+    // Sector latitude and longitude
     double sector_lat, sector_lon;
+
+    // Sector number
     int sector_number = 0;
+
+    // Lap count
     int lap_count = 0;
+
+    // Closest distance to the start/finish line
     double closest = 10;
+
+    // Delta time
     double delta_time = 0;
 
-    // Współrzędne start/meta
-    const double EARTH_RADIUS = 6371000.0;
-    const double START_LAT = 52.238843;
-    const double START_LON = 16.230933;
-    const double LAP_DISTANCE = 10.0; // Okrążenie co 75m
-    const double DELTA_DISTANCE = 0.5;
+    // Start/finish line coordinates
+    const double EARTH_RADIUS = 6371000.0;  // Earth's radius in meters
+    const double START_LAT = 52.238843;     // Start latitude
+    const double START_LON = 16.230933;     // Start longitude
+    const double DELTA_DISTANCE = 0.5;      // Minimum distance between sectors
 
+    // Structure to represent a sector
     struct Sector
     {
-        double lat, lon, time;
+        double lat, lon, time;  // Latitude, longitude, and time
     };
 
+    // Vectors to store the reference lap and best lap
     std::vector<Sector> reference_lap;
     std::vector<Sector> best_lap;
+
+    // Flag to indicate if this is the first lap
     bool is_first_lap = true;
 
+    // Flags to indicate if the lap timer is active and if the acceleration flag is set
     bool active = false;
     bool acc = false;
 
+    // Function to convert degrees to radians
     double degreesToRadians(double degrees)
     {
+        // Convert degrees to radians using the formula: radians = degrees * pi / 180
         return degrees * M_PI / 180.0;
     }
 
-    // Funkcja obliczająca odległość między dwoma punktami GPS
-    // latitude1, longitude1 - współrzędne pierwszego punktu (stopnie)
-    // latitude2, longitude2 - współrzędne drugiego punktu (stopnie)
+    // Function to calculate the distance between two GPS points using the Haversine formula
     double haversineDistance(double latitude1, double longitude1, double latitude2, double longitude2)
     {
-        // Konwersja stopni na radiany
+        // Convert latitudes and longitudes to radians
         double lat1 = degreesToRadians(latitude1);
         double lon1 = degreesToRadians(longitude1);
         double lat2 = degreesToRadians(latitude2);
         double lon2 = degreesToRadians(longitude2);
 
-        // Różnice współrzędnych
+        // Calculate the differences between latitudes and longitudes
         double dLat = lat2 - lat1;
         double dLon = lon2 - lon1;
 
-        // Wzór Haversine'a
+        // Calculate the Haversine distance
         double a = sin(dLat / 2) * sin(dLat / 2) +
                    cos(lat1) * cos(lat2) *
                        sin(dLon / 2) * sin(dLon / 2);
         double c = 2 * atan2(sqrt(a), sqrt(1 - a));
 
-        // Obliczenie odległości
+        // Return the distance in meters
         return EARTH_RADIUS * c;
     }
 
+    // Callback function for the GPS subscription
     void gps_callback(const sensor_msgs::msg::NavSatFix::SharedPtr msg)
     {
-
+        // Get the current latitude and longitude
         double current_lat = msg->latitude;
         double current_lon = msg->longitude;
+
+        // Get the current time
         rclcpp::Time now = this->now();
 
-        // RCLCPP_INFO(this->get_logger(), " Odległość auta: %f, %d", haversineDistance(current_lat, current_lon, START_LAT, START_LON), active);
-        // RCLCPP_INFO(this->get_logger(), " Odległość auta: %f, %f", current_lat, current_lon);
-
-        // Tryb 1: Wykrywanie przejazdu przez linię start/meta
+        // Calculate the distance to the start/finish line
         double distance = haversineDistance(current_lat, current_lon, START_LAT, START_LON);
 
+        // Check if the vehicle is close to the start/finish line
         if (distance < 1.4)
         {
+            // If this is the first time the vehicle is close to the start/finish line, set the active flag
             if (!active)
             {
                 closest = distance;
@@ -106,19 +144,22 @@ private:
             }
             else
             {
+                // If the vehicle is getting closer to the start/finish line, update the closest distance
                 if (distance < closest)
                 {
                     closest = distance;
                 }
                 else if (!acc)
                 {
+                    // If the vehicle has completed a lap, print the lap time and update the lap count
                     if (last_lap_time.nanoseconds() != 0)
-                    { // Pomijamy pierwszy pomiar
-                        RCLCPP_INFO(this->get_logger(), "Okrążenie: %d Czas: %.3f s", lap_count, (now - last_lap_time).seconds());
+                    {
+                        RCLCPP_INFO(this->get_logger(), "Lap: %d Time: %.3f s", lap_count, (now - last_lap_time).seconds());
                     }
                     lap_count++;
-                    sector_number = 0; // Resetujemy licznik sektora
-                    
+                    sector_number = 0;
+
+                    // Update the best lap time if necessary
                     switch (lap_count)
                     {
                     case 1:
@@ -128,13 +169,18 @@ private:
                         best_lap_time_end = now;
                         best_lap = reference_lap;
                         break;
-                    
                     default:
-                        if ((best_lap_time_end - best_lap_time_start).seconds() - (now - last_lap_time).seconds() > 0){
+                        if ((best_lap_time_end - best_lap_time_start).seconds() - (now - last_lap_time).seconds() > 0)
+                        {
                             best_lap_time_start = last_lap_time;
                             best_lap_time_end = now;
                             best_lap = reference_lap;
-                        }   
+                        }
+                        // Publish the best lap time and current lap time
+                        auto message = geometry_msgs::msg::Vector3();
+                        message.x = (best_lap_time_end - best_lap_time_start).seconds();
+                        message.y = (now - last_lap_time).seconds();
+                        lap_timer_time_pub_->publish(message);
                         break;
                     }
                     last_lap_time = now;
@@ -145,27 +191,28 @@ private:
         }
         else
         {
+            // If the vehicle is not close to the start/finish line, reset the closest distance and active flag
             closest = 10;
             active = false;
             acc = false;
         }
 
+        // Update the reference lap if this is the first lap
         if (lap_count == 1)
         {
             if (reference_lap.empty() || haversineDistance(current_lat, current_lon, reference_lap.back().lat, reference_lap.back().lon) >= DELTA_DISTANCE)
             {
                 reference_lap.push_back({current_lat, current_lon, (now - last_lap_time).seconds()});
-                // RCLCPP_INFO(this->get_logger(), "Zapisano punkt referencyjny #%lu", reference_lap.size());
             }
         }
         else
         {
+            // If this is not the first lap, find the closest sector in the best lap
             if (!best_lap.empty())
             {
                 double min_distance = 10.0;
                 int closest_index = -1;
 
-                // Znajdź najbliższy punkt referencyjny
                 for (size_t i = 0; i < best_lap.size(); i++)
                 {
                     double d = haversineDistance(current_lat, current_lon, best_lap[i].lat, best_lap[i].lon);
@@ -176,7 +223,7 @@ private:
                     }
                 }
 
-                // Jeśli znaleziono najbliższy punkt, oblicz deltę czasu
+                // If a closest sector is found, calculate the delta time
                 if (closest_index != -1)
                 {
                     double sector_time = (now - last_lap_time).seconds();
@@ -187,21 +234,35 @@ private:
             }
         }
 
+        // Update the last known latitude and longitude
         last_lat = current_lat;
         last_lon = current_lon;
     }
+
+    // Callback function for the lap timer
     void lap_timer_callback()
     {
+        // Publish the delta time
         auto message = std_msgs::msg::Float32();
         message.data = delta_time;
-        lap_timer_pub_->publish(message);
+        lap_timer_delta_pub_->publish(message);
     }
 };
 
+// Main function
 int main(int argc, char **argv)
 {
+    // Initialize the ROS 2 node
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<LapTimer>());
+
+    // Create a shared pointer to the LapTimer node
+    auto node = std::make_shared<LapTimer>();
+
+    // Spin the node
+    rclcpp::spin(node);
+
+    // Shutdown the ROS 2 node
     rclcpp::shutdown();
+
     return 0;
 }
