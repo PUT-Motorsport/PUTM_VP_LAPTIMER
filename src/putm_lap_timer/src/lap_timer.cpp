@@ -1,7 +1,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/nav_sat_fix.hpp"
 #include "std_msgs/msg/string.hpp"
-#include "std_msgs/msg/float32.hpp"
+#include "std_msgs/msg/u_int16.hpp"
 #include "geometry_msgs/msg/vector3.hpp"
 #include <cmath>
 #include <chrono>
@@ -21,7 +21,7 @@ public:
             "/vectornav/gnss", 50, std::bind(&LapTimer::gps_callback, this, std::placeholders::_1));
 
         // Create publishers for the lap timer delta and time
-        lap_timer_delta_pub_ = this->create_publisher<std_msgs::msg::Float32>("/putm_vcl/lap_timer/delta", 50);
+        lap_timer_delta_pub_ = this->create_publisher<std_msgs::msg::UInt16>("/putm_vcl/lap_timer/delta", 50);
         lap_timer_time_pub_ = this->create_publisher<geometry_msgs::msg::Vector3>("/putm_vcl/lap_timer/time", 50);
 
         // Create a timer that triggers every 20 milliseconds
@@ -37,7 +37,7 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr gps_sub_;
 
     // Publishers for the lap timer delta and time
-    rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr lap_timer_delta_pub_;
+    rclcpp::Publisher<std_msgs::msg::UInt16>::SharedPtr lap_timer_delta_pub_;
     rclcpp::Publisher<geometry_msgs::msg::Vector3>::SharedPtr lap_timer_time_pub_;
 
     // Last known latitude and longitude
@@ -243,8 +243,8 @@ private:
     void lap_timer_callback()
     {
         // Publish the delta time
-        auto message = std_msgs::msg::Float32();
-        message.data = delta_time;
+        auto message = std_msgs::msg::UInt16();
+        message.data = static_cast<int>(1000*delta_time);
         lap_timer_delta_pub_->publish(message);
     }
 };
