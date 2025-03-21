@@ -19,6 +19,8 @@ ament_target_dependencies(lap_timer rclcpp std_msgs sensor_msgs)
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 
+install(DIRECTORY launch DESTINATION share/${PROJECT_NAME}/)
+
 install(TARGETS
   lap_timer
   DESTINATION lib/${PROJECT_NAME})
