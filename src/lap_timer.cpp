@@ -3,6 +3,7 @@
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/u_int16.hpp"
 #include "geometry_msgs/msg/vector3.hpp"
+#include "putm_vcl_interfaces/msg/lap_timer.hpp"
 #include <cmath>
 #include <chrono>
 
@@ -21,6 +22,7 @@ public:
             "/vectornav/gnss", 50, std::bind(&LapTimer::gps_callback, this, std::placeholders::_1));
 
         // Create publishers for the lap timer delta and time
+        lap_timer_pub = this->create_publisher<putm_vcl_interfaces::msg::LapTimer>("/putm_vcl/lap_timer", 50);
         lap_timer_delta_pub_ = this->create_publisher<std_msgs::msg::UInt16>("/putm_vcl/lap_timer/delta", 50);
         lap_timer_time_pub_ = this->create_publisher<geometry_msgs::msg::Vector3>("/putm_vcl/lap_timer/time", 50);
 
@@ -39,6 +41,7 @@ private:
     // Publishers for the lap timer delta and time
     rclcpp::Publisher<std_msgs::msg::UInt16>::SharedPtr lap_timer_delta_pub_;
     rclcpp::Publisher<geometry_msgs::msg::Vector3>::SharedPtr lap_timer_time_pub_;
+    rclcpp::Publisher<putm_vcl_interfaces::msg::LapTimer>::SharedPtr lap_timer_pub;
 
     // Last known latitude and longitude
     double last_lat, last_lon;
@@ -69,8 +72,8 @@ private:
 
     // Start/finish line coordinates
     const double EARTH_RADIUS = 6371000.0;  // Earth's radius in meters
-    const double START_LAT = 52.238843;     // Start latitude
-    const double START_LON = 16.230933;     // Start longitude
+    const double START_LAT = 52.239040;     // Start latitude
+    const double START_LON = 16.230369;     // Start longitude
     const double DELTA_DISTANCE = 0.5;      // Minimum distance between sectors
 
     // Structure to represent a sector
@@ -134,7 +137,7 @@ private:
         double distance = haversineDistance(current_lat, current_lon, START_LAT, START_LON);
 
         // Check if the vehicle is close to the start/finish line
-        if (distance < 1.4)
+        if (distance < 5)
         {
             // If this is the first time the vehicle is close to the start/finish line, set the active flag
             if (!active)
@@ -177,10 +180,11 @@ private:
                             best_lap = reference_lap;
                         }
                         // Publish the best lap time and current lap time
-                        auto message = geometry_msgs::msg::Vector3();
-                        message.x = (best_lap_time_end - best_lap_time_start).seconds();
-                        message.y = (now - last_lap_time).seconds();
-                        lap_timer_time_pub_->publish(message);
+                        // auto message = putm_vcl_interfaces::msg::LapTimer();
+                        // message.current_lap = (int16_t)1000*(now - last_lap_time).seconds();
+                        // message.best_lap = (uint16_t)1000*(best_lap_time_end - best_lap_time_start).seconds();;
+                        // message.lap_counter = (uint8_t)lap_count;
+                        // lap_timer_pub->publish(message);
                         break;
                     }
                     last_lap_time = now;
@@ -243,9 +247,11 @@ private:
     void lap_timer_callback()
     {
         // Publish the delta time
-        auto message = std_msgs::msg::UInt16();
-        message.data = static_cast<int>(1000*delta_time);
-        lap_timer_delta_pub_->publish(message);
+        auto message = putm_vcl_interfaces::msg::LapTimer();
+        double del = 0.222;
+        int16_t u = static_cast<int16_t>(delta_time*1000);
+        message.delta = u;
+        lap_timer_pub->publish(message);
     }
 };
 
