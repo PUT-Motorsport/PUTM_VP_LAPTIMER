@@ -23,8 +23,6 @@ public:
 
         // Create publishers for the lap timer delta and time
         lap_timer_pub = this->create_publisher<putm_vcl_interfaces::msg::LapTimer>("/putm_vcl/lap_timer", 50);
-        lap_timer_delta_pub_ = this->create_publisher<std_msgs::msg::UInt16>("/putm_vcl/lap_timer/delta", 50);
-        lap_timer_time_pub_ = this->create_publisher<geometry_msgs::msg::Vector3>("/putm_vcl/lap_timer/time", 50);
 
         // Create a timer that triggers every 20 milliseconds
         timer_ = this->create_wall_timer(
@@ -182,12 +180,6 @@ private:
                             best_lap_time_end = now;
                             best_lap = reference_lap;
                         }
-                        // Publish the best lap time and current lap time
-                        // auto message = putm_vcl_interfaces::msg::LapTimer();
-                        // message.current_lap = (int16_t)1000*(now - last_lap_time).seconds();
-                        // message.best_lap = (uint16_t)1000*(best_lap_time_end - best_lap_time_start).seconds();;
-                        // message.lap_counter = (uint8_t)lap_count;
-                        // lap_timer_pub->publish(message);
                         lt = static_cast<uint16_t>(1000 * (now - last_lap_time).seconds());
                         blt = static_cast<uint16_t>(1000 * (best_lap_time_end - best_lap_time_start).seconds());
                         break;
@@ -253,8 +245,9 @@ private:
     {
         // Publish the delta time
         auto message = putm_vcl_interfaces::msg::LapTimer();
-        double del = 0.222;
-        int16_t u = static_cast<int16_t>(del * 1000);
+        double del = 0.2322;
+        // int16_t u = static_cast<int16_t>(del * 1000);
+        int16_t u = 2322;
         message.delta = u;
         // message.current_lap = lt;
         // message.best_lap = blt;
