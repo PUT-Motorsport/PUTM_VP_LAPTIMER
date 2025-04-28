@@ -86,6 +86,7 @@ private:
     // Vectors to store the reference lap and best lap
     std::vector<Sector> reference_lap;
     std::vector<Sector> best_lap;
+    std::vector<Sector> current_lap;
 
     // Flag to indicate if this is the first lap
     bool is_first_lap = true;
@@ -162,6 +163,8 @@ private:
                     }
                     lap_count++;
                     sector_number = 0;
+                    reference_lap.clear(); // Clear old data
+                    reference_lap = current_lap; // Copy data
 
                     // Update the best lap time if necessary
                     switch (lap_count)
@@ -184,6 +187,7 @@ private:
                         blt = static_cast<uint16_t>(1000 * (best_lap_time_end - best_lap_time_start).seconds());
                         break;
                     }
+                    current_lap.clear();
                     last_lap_time = now;
                     active = true;
                     acc = true;
@@ -201,9 +205,9 @@ private:
         // Update the reference lap if this is the first lap
         if (lap_count == 1)
         {
-            if (reference_lap.empty() || haversineDistance(current_lat, current_lon, reference_lap.back().lat, reference_lap.back().lon) >= DELTA_DISTANCE)
+            if (current_lap.empty() || haversineDistance(current_lat, current_lon, reference_lap.back().lat, reference_lap.back().lon) >= DELTA_DISTANCE)
             {
-                reference_lap.push_back({current_lat, current_lon, (now - last_lap_time).seconds()});
+                current_lap.push_back({current_lat, current_lon, (now - last_lap_time).seconds()});
             }
         }
         else
@@ -243,7 +247,7 @@ private:
     // Callback function for the lap timer
     void lap_timer_callback()
     {
-        // Publish the delta time
+        Publish the delta time
         auto message = putm_vcl_interfaces::msg::LapTimer();
         double del = 0.2322;
         // int16_t u = static_cast<int16_t>(del * 1000);
