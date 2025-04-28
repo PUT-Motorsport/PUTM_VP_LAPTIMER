@@ -163,8 +163,7 @@ private:
                     }
                     lap_count++;
                     sector_number = 0;
-                    reference_lap.clear(); // Clear old data
-                    reference_lap = current_lap; // Copy data
+                    
 
                     // Update the best lap time if necessary
                     switch (lap_count)
@@ -174,14 +173,16 @@ private:
                         break;
                     case 2:
                         best_lap_time_end = now;
-                        best_lap = reference_lap;
+                        best_lap = current_lap;
+                        reference_lap = current_lap;
                         break;
                     default:
+                        reference_lap = current_lap;
                         if ((best_lap_time_end - best_lap_time_start).seconds() - (now - last_lap_time).seconds() > 0)
                         {
                             best_lap_time_start = last_lap_time;
                             best_lap_time_end = now;
-                            best_lap = reference_lap;
+                            best_lap = current_lap;
                         }
                         lt = static_cast<uint16_t>(1000 * (now - last_lap_time).seconds());
                         blt = static_cast<uint16_t>(1000 * (best_lap_time_end - best_lap_time_start).seconds());
@@ -205,13 +206,17 @@ private:
         // Update the reference lap if this is the first lap
         if (lap_count == 1)
         {
-            if (current_lap.empty() || haversineDistance(current_lat, current_lon, reference_lap.back().lat, reference_lap.back().lon) >= DELTA_DISTANCE)
+            if (current_lap.empty() || haversineDistance(current_lat, current_lon, current_lap.back().lat, current_lap.back().lon) >= DELTA_DISTANCE)
             {
                 current_lap.push_back({current_lat, current_lon, (now - last_lap_time).seconds()});
             }
         }
-        else
+        else if(lap_count > 1)
         {
+            if (current_lap.empty() || haversineDistance(current_lat, current_lon, current_lap.back().lat, current_lap.back().lon) >= DELTA_DISTANCE)
+            {
+                current_lap.push_back({current_lat, current_lon, (now - last_lap_time).seconds()});
+            }
             // If this is not the first lap, find the closest sector in the best lap
             if (!best_lap.empty())
             {
@@ -247,7 +252,7 @@ private:
     // Callback function for the lap timer
     void lap_timer_callback()
     {
-        Publish the delta time
+        // Publish the delta time
         auto message = putm_vcl_interfaces::msg::LapTimer();
         double del = 0.2322;
         // int16_t u = static_cast<int16_t>(del * 1000);
