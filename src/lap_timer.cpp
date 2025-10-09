@@ -74,7 +74,7 @@ private:
     // Start/finish line coordinates
     const double EARTH_RADIUS = 6371000.0; // Earth's radius in meters
     const double START_LAT = 52.239040;    // Start latitude
-    const double START_LON = 16.230369;    // Start longitude
+    const double START_LON = 16.229503;    // Start longitude
     const double DELTA_DISTANCE = 0.5;     // Minimum distance between sectors
 
     // Structure to represent a sector
@@ -139,7 +139,7 @@ private:
         double distance = haversineDistance(current_lat, current_lon, START_LAT, START_LON);
 
         // Check if the vehicle is close to the start/finish line
-        if (distance < 5)
+        if (distance < 10)
         {
             // If this is the first time the vehicle is close to the start/finish line, set the active flag
             if (!active)
@@ -239,7 +239,7 @@ private:
                     double sector_time = (now - last_lap_time).seconds();
                     delta_time = sector_time - best_lap[closest_index].time;
 
-                    RCLCPP_INFO(this->get_logger(), "Delta: %.3f s", delta_time);
+                    // RCLCPP_INFO(this->get_logger(), "Delta: %.3f s", delta_time);
                 }
             }
         }
@@ -256,14 +256,15 @@ private:
         auto message = putm_vcl_interfaces::msg::LapTimer();
         double del = 0.2322;
         // int16_t u = static_cast<int16_t>(del * 1000);
-        int16_t u = 2322;
-        message.delta = u;
-        // message.current_lap = lt;
-        // message.best_lap = blt;
-        // message.lap_counter = (uint8_t)lap_count;
+        int16_t u = -2137;
+        message.delta = (int16_t)delta_time;
+        message.current_lap = (uint16_t)lt;
+        message.best_lap = (uint16_t)blt;
+        message.lap_counter = (uint8_t)lap_count;
         message.current_lap = 56145;
         message.best_lap = 52123;
         message.lap_counter = 11;
+        message.delta = u;
         lap_timer_pub->publish(message);
     }
 };
