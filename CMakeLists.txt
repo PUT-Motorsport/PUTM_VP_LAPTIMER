@@ -11,11 +11,11 @@ find_package(sensor_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(putm_vcl_interfaces REQUIRED)
-find_package(putm_vcl REQUIRED)
+# find_package(putm_vcl_interfaces REQUIRED)
+# find_package(putm_vcl REQUIRED)
 
 add_executable(lap_timer src/lap_timer.cpp)
-ament_target_dependencies(lap_timer rclcpp std_msgs sensor_msgs putm_vcl_interfaces)
+ament_target_dependencies(lap_timer rclcpp std_msgs sensor_msgs geometry_msgs) #putm_vcl_interfaces
 
 # uncomment the following section in order to fill in
 # further dependencies manually.

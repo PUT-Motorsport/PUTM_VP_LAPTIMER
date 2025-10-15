@@ -3,7 +3,7 @@
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/u_int16.hpp"
 #include "geometry_msgs/msg/vector3.hpp"
-#include "putm_vcl_interfaces/msg/lap_timer.hpp"
+// #include "putm_vcl_interfaces/msg/lap_timer.hpp"
 #include <cmath>
 #include <chrono>
 
@@ -22,7 +22,7 @@ public:
             "/vectornav/gnss", 50, std::bind(&LapTimer::gps_callback, this, std::placeholders::_1));
 
         // Create publishers for the lap timer delta and time
-        lap_timer_pub = this->create_publisher<putm_vcl_interfaces::msg::LapTimer>("/putm_vcl/lap_timer", 50);
+        // lap_timer_pub = this->create_publisher<putm_vcl_interfaces::msg::LapTimer>("/putm_vcl/lap_timer", 50);
 
         // Create a timer that triggers every 20 milliseconds
         timer_ = this->create_wall_timer(
@@ -39,7 +39,7 @@ private:
     // Publishers for the lap timer delta and time
     rclcpp::Publisher<std_msgs::msg::UInt16>::SharedPtr lap_timer_delta_pub_;
     rclcpp::Publisher<geometry_msgs::msg::Vector3>::SharedPtr lap_timer_time_pub_;
-    rclcpp::Publisher<putm_vcl_interfaces::msg::LapTimer>::SharedPtr lap_timer_pub;
+    // rclcpp::Publisher<putm_vcl_interfaces::msg::LapTimer>::SharedPtr lap_timer_pub;
 
     // Last known latitude and longitude
     double last_lat, last_lon;
@@ -73,8 +73,8 @@ private:
 
     // Start/finish line coordinates
     const double EARTH_RADIUS = 6371000.0; // Earth's radius in meters
-    const double START_LAT = 52.239040;    // Start latitude
-    const double START_LON = 16.229503;    // Start longitude
+    const double START_LAT = 52.239048;    // Start latitude
+    const double START_LON = 16.230333;    // Start longitude
     const double DELTA_DISTANCE = 0.5;     // Minimum distance between sectors
 
     // Structure to represent a sector
@@ -247,25 +247,27 @@ private:
         // Update the last known latitude and longitude
         last_lat = current_lat;
         last_lon = current_lon;
+        RCLCPP_INFO(this->get_logger(), "Delta:  %.3f, Current lap: %d, Best lap: %d, Lap count: %d\n", delta_time, lt, blt, lap_count);
     }
 
     // Callback function for the lap timer
     void lap_timer_callback()
     {
         // Publish the delta time
-        auto message = putm_vcl_interfaces::msg::LapTimer();
+        // auto message = putm_vcl_interfaces::msg::LapTimer();
         double del = 0.2322;
         // int16_t u = static_cast<int16_t>(del * 1000);
         int16_t u = -2137;
-        message.delta = (int16_t)delta_time;
-        message.current_lap = (uint16_t)lt;
-        message.best_lap = (uint16_t)blt;
-        message.lap_counter = (uint8_t)lap_count;
-        message.current_lap = 56145;
-        message.best_lap = 52123;
-        message.lap_counter = 11;
-        message.delta = u;
-        lap_timer_pub->publish(message);
+        // message.delta = (int16_t)delta_time;
+        // message.current_lap = (uint16_t)lt;
+        // message.best_lap = (uint16_t)blt;
+        // message.lap_counter = (uint8_t)lap_count;
+        // message.current_lap = 56145;
+        // message.best_lap = 52123;
+        // message.lap_counter = 11;
+        // message.delta = u;
+        // lap_timer_pub->publish(message);
+        
     }
 };
 
