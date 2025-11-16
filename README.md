@@ -32,6 +32,41 @@ The package provides several configurable parameters:
 
 These parameters can be modified in the `lap_timer.cpp` file.
 
+
+**Testing**
+-------
+Clone the repository: 
+```bash
+git clone https://github.com/PUT-Motorsport/PUTM_VP_LAPTIMER.git
+```
+
+Change branch to test branch
+
+```bash
+git checkout test
+```
+In order to read the db3 file you need to source putm_ws:
+```bash
+git clone --recurse-submodules git@github.com:PUT-Motorsport/putm_ws.git
+cd putm_ws
+colcon build
+source install/setup.bash
+```
+Run plotjuggler
+
+```bash
+ros2 run plotjuggler plotjuggler
+```
+Open db3 file with metadata.yaml. Make sure that ROS2 Topic Re-Publisher box is checked.
+
+Enter your built LapTimer workspace
+```bash
+cd putm_lap_timer
+source install/setup.bash
+ros2 run putm_lap_timer lap_timer
+```
+
+
 **License**
 -------
 
