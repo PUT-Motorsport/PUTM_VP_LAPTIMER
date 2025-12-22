@@ -50,12 +50,12 @@ stateDiagram-v2
 
     state "RECORDING_REFERENCE_LAP" as RECORDING
     note right of RECORDING
-        Okrążenie 1: map building
+        Lap 1: map building
     end note
 
     state "LAPPING" as LAPPING
     note right of LAPPING
-        Okrążenie 2+: delta and race
+        Lap 2+: delta and race
     end note
 
     WAITING --> RECORDING: First crossing of the Start/Finish line
