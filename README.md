@@ -11,11 +11,11 @@ This version implements a State Machine architecture to robustly handle the diff
 **Features**
 ------------
 
-*State Machine Architecture: Robust handling of race stages.
-*Live Delta Calculation: Spatial comparison between the current position and the best lap ("Ghost Car") using a Nearest Neighbor algorithm.
-*Dynamic Map Generation: Automatically records the track path during the first flying lap.
-*Robust Line Crossing Detection: Uses a "Closest Approach" algorithm to detect the exact moment of crossing the start/finish line, preventing false positives near the gate.
-*Throttled Logging: Provides readable, real-time feedback in the console without flooding the output.
+* State Machine Architecture: Robust handling of race stages.
+* Live Delta Calculation: Spatial comparison between the current position and the best lap ("Ghost Car") using a Nearest Neighbor algorithm.
+* Dynamic Map Generation: Automatically records the track path during the first flying lap.
+* Robust Line Crossing Detection: Uses a "Closest Approach" algorithm to detect the exact moment of crossing the start/finish line, preventing false positives near the gate.
+* Throttled Logging: Provides readable, real-time feedback in the console without flooding the output.
 
 **State Machine Logic**
 -----------------------
