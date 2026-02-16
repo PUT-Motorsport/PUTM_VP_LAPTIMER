@@ -7,6 +7,7 @@
 #include <chrono>
 #include <memory>
 #include <sstream>
+#include <array>
 
 using namespace std::chrono_literals;
 
@@ -24,7 +25,7 @@ private:
 public:
     LapTimer() : Node("lap_timer"), m_state(State::WAITING_FOR_START)
     {
-        // Declare use_sim_time parameter only if it's not already declared
+        // Declare use_sim_time parameter
         if (!this->has_parameter("use_sim_time"))
         {
             this->declare_parameter("use_sim_time", rclcpp::ParameterValue(false));
@@ -64,8 +65,8 @@ private:
 
     // -- Lap Data --
     uint8_t m_lap_count = 0;
-    uint16_t m_last_lap_time_ms = 0;
-    uint16_t m_best_lap_time_ms = 0;
+    uint32_t m_last_lap_time_ms = 0;
+    uint32_t m_best_lap_time_ms = 0;
     double m_delta_time_s = 0.0;
     rclcpp::Time m_current_lap_start_time;
 
@@ -73,8 +74,14 @@ private:
     {
         double lat, lon, time_s;
     };
-    std::vector<Sector> m_reference_lap_sectors;
-    std::vector<Sector> m_best_lap_sectors;
+
+    static constexpr size_t MAX_SECTORS = 10000;
+
+    std::array<Sector, MAX_SECTORS> m_reference_lap_sectors;
+    size_t m_ref_sectors_count = 0; // Licznik, ile mamy aktualnie punktów
+
+    std::array<Sector, MAX_SECTORS> m_best_lap_sectors;
+    size_t m_best_sectors_count = 0; // Licznik dla najlepszego okrążenia
 
     // -- Constants --
     const double EARTH_RADIUS_M = 6371000.0;
@@ -148,82 +155,137 @@ private:
 
         // If we are here, a lap has been completed.
         double completed_lap_time_s = (now - m_current_lap_start_time).seconds();
-        m_last_lap_time_ms = static_cast<uint16_t>(completed_lap_time_s * 1000);
+        m_last_lap_time_ms = static_cast<uint32_t>(completed_lap_time_s * 1000);
         
         RCLCPP_INFO(this->get_logger(), "Lap %d finished. Time: %.3f s", m_lap_count, completed_lap_time_s);
 
-        // Now, handle best lap logic
-        if (m_state == State::RECORDING_REFERENCE_LAP) // This was the first completed lap
+        bool is_new_best = false;
+
+        if (m_state == State::RECORDING_REFERENCE_LAP)
+        {
+            is_new_best = true; // First lap is always the best lap
+            m_state = State::LAPPING; // Transition to lapping state after recording the reference lap
+        }
+        else if (m_state == State::LAPPING && m_last_lap_time_ms < m_best_lap_time_ms)
+        {
+            is_new_best = true;
+        }
+
+        if (is_new_best)
         {
             m_best_lap_time_ms = m_last_lap_time_ms;
-            m_best_lap_sectors = m_reference_lap_sectors;
-            RCLCPP_INFO(this->get_logger(), "First reference lap recorded.");
-        }
-        else if (m_state == State::LAPPING) // Subsequent laps
-        {
-            if (m_last_lap_time_ms < m_best_lap_time_ms)
-            {
-                m_best_lap_time_ms = m_last_lap_time_ms;
-                m_best_lap_sectors = m_reference_lap_sectors;
-                RCLCPP_INFO(this->get_logger(), "New best lap!");
-            }
+            m_best_sectors_count = m_ref_sectors_count; // Update best sectors count
+            std::copy(m_reference_lap_sectors.begin(), m_reference_lap_sectors.begin() + m_ref_sectors_count, m_best_lap_sectors.begin());
+            RCLCPP_INFO(this->get_logger(), "New best lap recorded with time: %.3f s", completed_lap_time_s);
         }
 
         // Prepare for the next lap
         m_lap_count++;
         m_current_lap_start_time = now;
-        m_reference_lap_sectors.clear();
-
-        // Transition state
-        if (m_state == State::RECORDING_REFERENCE_LAP)
-        {
-            m_state = State::LAPPING;
-        }
+        m_ref_sectors_count = 0;
     }
 
     void state_recording_reference_lap(double current_lat, double current_lon, const rclcpp::Time &now)
     {
         double time_into_lap_s = (now - m_current_lap_start_time).seconds();
-        if (m_reference_lap_sectors.empty() || haversineDistance(current_lat, current_lon, m_reference_lap_sectors.back().lat, m_reference_lap_sectors.back().lon) >= SECTOR_RECORDING_DISTANCE_M)
+
+        bool should_record = false;
+
+        if (m_ref_sectors_count == 0) 
         {
-            m_reference_lap_sectors.push_back({current_lat, current_lon, time_into_lap_s});
+            should_record = true;
+        } 
+        else 
+        {
+            const auto& last_sector = m_reference_lap_sectors[m_ref_sectors_count - 1];
+            
+            if (haversineDistance(current_lat, current_lon, last_sector.lat, last_sector.lon) >= SECTOR_RECORDING_DISTANCE_M)
+            {
+                should_record = true;
+            }
         }
+
+        if (should_record)
+        {
+            if (m_ref_sectors_count < MAX_SECTORS)
+            {
+                m_reference_lap_sectors[m_ref_sectors_count] = {current_lat, current_lon, time_into_lap_s};
+                m_ref_sectors_count++; 
+            }
+            else
+            {
+                RCLCPP_ERROR_ONCE(this->get_logger(), "MEMORY FULL! Increase MAX_SECTORS.");
+            }
+        }   
+        
+
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
+            "Lap: %d | Time: %.2f s | (Recording Reference)", 
+            m_lap_count, time_into_lap_s);
     }
 
     void state_lapping(double current_lat, double current_lon, const rclcpp::Time &now)
     {
-        // Also record sectors during lapping to update the reference for the *next* lap
         double time_into_lap_s = (now - m_current_lap_start_time).seconds();
-        if (m_reference_lap_sectors.empty() || haversineDistance(current_lat, current_lon, m_reference_lap_sectors.back().lat, m_reference_lap_sectors.back().lon) >= SECTOR_RECORDING_DISTANCE_M)
+
+        bool should_record = false;
+
+        if (m_ref_sectors_count == 0) 
         {
-            m_reference_lap_sectors.push_back({current_lat, current_lon, time_into_lap_s});
+            should_record = true;
+        } 
+        else 
+        {
+            const auto& last_sector = m_reference_lap_sectors[m_ref_sectors_count - 1];
+            
+            if (haversineDistance(current_lat, current_lon, last_sector.lat, last_sector.lon) >= SECTOR_RECORDING_DISTANCE_M)
+            {
+                should_record = true;
+            }
         }
 
+        if (should_record)
+        {
+            if (m_ref_sectors_count < MAX_SECTORS)
+            {
+                m_reference_lap_sectors[m_ref_sectors_count] = {current_lat, current_lon, time_into_lap_s};
+                m_ref_sectors_count++; 
+            }
+            else
+            {
+                RCLCPP_ERROR_ONCE(this->get_logger(), "MEMORY FULL! Increase MAX_SECTORS.");
+            }
+        } 
 
-        if (m_best_lap_sectors.empty())
+        if (m_best_sectors_count == 0)
         {
             m_delta_time_s = 0.0;
             return;
         }
 
-        double min_dist_to_sector = -1.0;
+        double min_dist_to_sector = 100.0;
         int closest_sector_idx = -1;
 
-        for (size_t i = 0; i < m_best_lap_sectors.size(); ++i)
+        for (size_t i = 0; i < m_best_sectors_count; ++i)
         {
             double d = haversineDistance(current_lat, current_lon, m_best_lap_sectors[i].lat, m_best_lap_sectors[i].lon);
-            if (closest_sector_idx == -1 || d < min_dist_to_sector)
+            if (d < min_dist_to_sector)
             {
                 min_dist_to_sector = d;
                 closest_sector_idx = i;
             }
         }
 
-        if (closest_sector_idx != -1)
+        if (closest_sector_idx != -1 && min_dist_to_sector < 20.0)
         {
             double current_time_into_lap_s = (now - m_current_lap_start_time).seconds();
             double best_lap_time_at_sector_s = m_best_lap_sectors[closest_sector_idx].time_s;
+            
             m_delta_time_s = current_time_into_lap_s - best_lap_time_at_sector_s;
+
+            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
+                "Lap: %d | Time: %.2f s | Delta: %.3f s", 
+                m_lap_count, current_time_into_lap_s, m_delta_time_s);
         }
     }
 
@@ -250,8 +312,8 @@ private:
             break;
         }
 
-        RCLCPP_INFO(this->get_logger(), "Delta: %.3f, Last lap: %d, Best lap: %d, Lap count: %d",
-                    m_delta_time_s, m_last_lap_time_ms, m_best_lap_time_ms, m_lap_count);
+        //RCLCPP_INFO(this->get_logger(), "Delta: %.3f, Last lap: %d, Best lap: %d, Lap count: %d",
+                    //m_delta_time_s, m_last_lap_time_ms, m_best_lap_time_ms, m_lap_count);
     }
 
     void lap_timer_callback()
@@ -261,7 +323,7 @@ private:
         ss << "best_lap:" << m_best_lap_time_ms
            << ",lap_counter:" << static_cast<int>(m_lap_count)
            << ",last_lap:" << m_last_lap_time_ms
-           << ",delta:" << static_cast<int16_t>(m_delta_time_s * 1000);
+           << ",delta:" << static_cast<int32_t>(m_delta_time_s * 1000);
         message.data = ss.str();
         lap_timer_pub_->publish(message);
     }
