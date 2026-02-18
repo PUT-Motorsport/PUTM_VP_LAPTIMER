@@ -47,6 +47,9 @@ public:
         // ROS2 Wall timer for periodic publishing
         m_wall_timer = this->create_wall_timer(
             20ms, std::bind(&LapTimer::lap_timer_callback, this));
+        
+        // Initial gate post calculation for the start line
+        setup_gate_posts(START_CENTER_LAT, START_CENTER_LON, START_HEADING_DEG, 10.0);
 
         RCLCPP_INFO(this->get_logger(), "LapTimer initialized, waiting for first start line cross.");
     }
@@ -59,9 +62,9 @@ private:
 
     // -- State Machine --
     State m_state;
-    bool m_is_approaching_start = false;
-    double m_closest_approach = 10.0;
-    bool m_has_crossed_this_pass = false;
+    // bool m_is_approaching_start = false;
+    // double m_closest_approach = 10.0;
+    // bool m_has_crossed_this_pass = false;
 
     // -- Lap Data --
     uint8_t m_lap_count = 0;
@@ -85,12 +88,45 @@ private:
 
     // -- Constants --
     const double EARTH_RADIUS_M = 6371000.0;
-    const double START_FINISH_LAT = 52.239048;    // Start latitude from old code
-    const double START_FINISH_LON = 16.230333;    // Start longitude from old code
-    const double START_FINISH_GATE_RADIUS_M = 10.0; // Gate radius from old code
-    const double SECTOR_RECORDING_DISTANCE_M = 0.5;
+    const double START_CENTER_LAT = 52.239048;    
+    const double START_CENTER_LON = 16.230333;   
+    const double SECTOR_RECORDING_DISTANCE_M = 0.5; // Minimum distance to record a new sector point
+
+    const double START_HEADING_DEG = 292.0; // This is the heading calculated from rosbag data for the start line (direction NW approximately) 
+    //This need to be calculated based on the actual start line orientation. It can be calculated from the two gate posts or from the rosbag data as done here.
+
+    //Deratives for gate coridnations
+    double m_gate_p1_lat;
+    double m_gate_p1_lon;
+    double m_gate_p2_lat;
+    double m_gate_p2_lon;
+
+    // Deratives for gate post calculation
+    double m_prev_lat = 0.0;
+    double m_prev_lon = 0.0;
 
     // -- Utility Functions --
+    //Function to calculate gate post coordinates based on center point, heading and half width of the gate
+    void setup_gate_posts(double center_lat, double center_lon, double heading_deg, double half_width_m)
+    {
+        double lat_rad = degreesToRadians(center_lat);
+        double hdg_rad = degreesToRadians(heading_deg);
+
+        // P1 (Left cone) = Heading - 90 degrees
+        double left_angle = hdg_rad - (M_PI / 2.0);
+        m_gate_p1_lat = center_lat + (half_width_m * cos(left_angle) / EARTH_RADIUS_M) * (180.0 / M_PI);
+        m_gate_p1_lon = center_lon + (half_width_m * sin(left_angle) / (EARTH_RADIUS_M * cos(lat_rad))) * (180.0 / M_PI);
+
+        // P2 (Right cone) = Heading + 90 degrees
+        double right_angle = hdg_rad + (M_PI / 2.0);
+        m_gate_p2_lat = center_lat + (half_width_m * cos(right_angle) / EARTH_RADIUS_M) * (180.0 / M_PI);
+        m_gate_p2_lon = center_lon + (half_width_m * sin(right_angle) / (EARTH_RADIUS_M * cos(lat_rad))) * (180.0 / M_PI);
+
+        RCLCPP_INFO(this->get_logger(), "Gate Calculated: P1(%.8f, %.8f) - P2(%.8f, %.8f)", 
+            m_gate_p1_lat, m_gate_p1_lon, m_gate_p2_lat, m_gate_p2_lon);
+    }
+
+
     double degreesToRadians(double degrees)
     {
         return degrees * M_PI / 180.0;
@@ -107,39 +143,43 @@ private:
         return EARTH_RADIUS_M * c;
     }
 
-    // -- State Handlers --
-
-    void handle_start_finish_crossing(double current_lat, double current_lon, const rclcpp::Time &now)
+    // Funkcja pomocnicza: Iloczyn wektorowy (Cross Product)
+    double crossProduct(double ax, double ay, double bx, double by, double cx, double cy)
     {
-        double distance_to_start = haversineDistance(current_lat, current_lon, START_FINISH_LAT, START_FINISH_LON);
-
-        if (distance_to_start < START_FINISH_GATE_RADIUS_M)
-        {
-            if (!m_is_approaching_start)
-            {
-                m_closest_approach = distance_to_start;
-                m_is_approaching_start = true;
-            }
-            else
-            {
-                if (distance_to_start < m_closest_approach)
-                {
-                    m_closest_approach = distance_to_start;
-                }
-                else if (!m_has_crossed_this_pass)
-                {
-                    process_lap_crossing(now);
-                    m_has_crossed_this_pass = true;
-                }
-            }
-        }
-        else
-        {
-            m_is_approaching_start = false;
-            m_has_crossed_this_pass = false;
-            m_closest_approach = START_FINISH_GATE_RADIUS_M;
-        }
+        return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
     }
+
+    // Sprawdza matematycznie czy przecięliśmy linię między P1 a P2
+    bool check_line_crossing(double curr_lat, double curr_lon)
+    {
+        if (m_prev_lat == 0.0 && m_prev_lon == 0.0) return false;
+
+        // Używamy dynamicznie wyliczonych punktów
+        double p1_x = m_gate_p1_lon;
+        double p1_y = m_gate_p1_lat;
+        double p2_x = m_gate_p2_lon;
+        double p2_y = m_gate_p2_lat;
+
+        double car_prev_x = m_prev_lon;
+        double car_prev_y = m_prev_lat;
+        double car_curr_x = curr_lon;
+        double car_curr_y = curr_lat;
+
+        double cp1 = crossProduct(p1_x, p1_y, p2_x, p2_y, car_prev_x, car_prev_y);
+        double cp2 = crossProduct(p1_x, p1_y, p2_x, p2_y, car_curr_x, car_curr_y);
+        double cp3 = crossProduct(car_prev_x, car_prev_y, car_curr_x, car_curr_y, p1_x, p1_y);
+        double cp4 = crossProduct(car_prev_x, car_prev_y, car_curr_x, car_curr_y, p2_x, p2_y);
+
+        if (((cp1 > 0 && cp2 < 0) || (cp1 < 0 && cp2 > 0)) &&
+            ((cp3 > 0 && cp4 < 0) || (cp3 < 0 && cp4 > 0)))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    // -- State Handlers --
 
     void process_lap_crossing(const rclcpp::Time &now)
     {
@@ -288,8 +328,7 @@ private:
                 m_lap_count, current_time_into_lap_s, m_delta_time_s);
         }
     }
-
-    // -- Main Callbacks --
+//Main callback for GPS data, handling state transitions and lap timing logic
 
     void gps_callback(const sensor_msgs::msg::NavSatFix::SharedPtr msg)
     {
@@ -297,8 +336,11 @@ private:
         double current_lon = msg->longitude;
         rclcpp::Time now = this->get_clock()->now();
 
-        handle_start_finish_crossing(current_lat, current_lon, now);
-
+        //handle_start_finish_crossing(current_lat, current_lon, now);
+        if (check_line_crossing(current_lat, current_lon))
+        {
+            process_lap_crossing(now);
+        }    
         // State-specific logic
         switch (m_state)
         {
@@ -314,6 +356,8 @@ private:
 
         //RCLCPP_INFO(this->get_logger(), "Delta: %.3f, Last lap: %d, Best lap: %d, Lap count: %d",
                     //m_delta_time_s, m_last_lap_time_ms, m_best_lap_time_ms, m_lap_count);
+        m_prev_lat = current_lat;
+        m_prev_lon = current_lon;
     }
 
     void lap_timer_callback()
