@@ -114,6 +114,28 @@ source install/setup.bash
 ros2 run putm_lap_timer lap_timer
 ```
 
+### Dynamic Start Line Calibration (Gate Reset)
+
+The LapTimer features a dynamic virtual start/finish line calibration that can be set anywhere on the track based on the car's current GPS position.
+**How to reset the start line:**
+To accurately calculate the gate orientation, the system needs to establish a motion vector. **You cannot reset the gate if the car has been stationary since startup.**
+**Track Calibration Procedure:**
+1. Drive the car forward for at least 1-2 meters from the startup point (this allows the system to calculate the correct heading/azimuth).
+2. Stop before your desired start line. *(Note: The virtual gate will be placed exactly 1 meter ahead of the GPS antenna).*
+3. Open a new terminal and call the reset service:
+```bash
+ros2 service call /lap_timer/reset_gate std_srvs/srv/Trigger {}
+```
+**Expected Results:**
+If successful, the service terminal will output:
+```console
+response:
+std_srvs.srv.Trigger_Response(success=True, message='Start Line Calibrated Successfully!')
+```
+The LapTimer will then reset the lap counters, close the active CSV log, and enter the WAITING_FOR_START mode until you cross the new line.
+**Troubleshooting:**
+If you receive success=False with the message "Car hasn't moved yet! Drive forward 1-2 meters first.", the vehicle hasn't traveled far enough from the GPS anchor point to calculate a heading vector. Drive a bit further forward and try again.
+
 
 **License**
 -------
