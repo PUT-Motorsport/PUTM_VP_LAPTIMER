@@ -4,6 +4,7 @@
 #include "std_msgs/msg/u_int16.hpp"
 #include "geometry_msgs/msg/vector3.hpp"
 #include "geometry_msgs/msg/twist_with_covariance_stamped.hpp"
+#include "std_srvs/srv/trigger.hpp"
 #include <cmath>
 #include <chrono>
 #include <memory>
@@ -40,6 +41,12 @@ public:
 
         lap_timer_pub_ = this->create_publisher<std_msgs::msg::String>("/putm_vcl/lap_timer", 50);
 
+        // Service to reset gate position, useful for testing and calibration without restarting the node
+        reset_gate_srv_ = this->create_service<std_srvs::srv::Trigger>(
+            "/lap_timer/reset_gate", 
+            std::bind(&LapTimer::reset_gate_callback, this, std::placeholders::_1, std::placeholders::_2));
+
+
         // ROS2 Wall timer for periodic publishing
         m_wall_timer = this->create_wall_timer(
             20ms, std::bind(&LapTimer::lap_timer_callback, this));
@@ -47,6 +54,7 @@ public:
         // Initial gate post calculation for the start line
         setup_gate_posts(START_CENTER_LAT, START_CENTER_LON, START_HEADING_DEG, 10.0);
 
+        // Initialize logging and session settings
         const char* home_dir = std::getenv("HOME");
         std::string base_path_str;
 
@@ -76,7 +84,6 @@ public:
         auto t = std::time(nullptr);
         auto tm = *std::localtime(&t);
         
-        //stworzenie drugiej nazwy pliku z aktualną datą i godziną dla całej sesji
         std::stringstream ss_filename_session;
         ss_filename_session << "SESSION_TOTAL_" << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S") << ".csv";
         std::filesystem::path full_path_const = log_dir / ss_filename_session.str();
@@ -103,26 +110,35 @@ public:
     }
 
 private:
+    // variables for logging and file management
     std::filesystem::path log_dir_;
     std::ofstream lap_file_;
     std::ofstream session_file_;  
 
-    // -- ROS2 Constructs --
+    // Timer object for periodic tasks, such as publishing lap times or deltas
     rclcpp::TimerBase::SharedPtr m_wall_timer;
+    // Subscription to the GPS topic
     rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr gps_sub_;
+    // Publisher for lap timer updates, which can be used by other nodes or for debugging
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr lap_timer_pub_;
-
+    // Subscription to the body velocity topic, used for logging speed
     rclcpp::Subscription<geometry_msgs::msg::TwistWithCovarianceStamped>::SharedPtr body_velocity_sub;
+    // Service to reset the gate position, allowing for dynamic recalibration during testing
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reset_gate_srv_;
+
+    double m_current_lat = 0.0;
+    double m_current_lon = 0.0;
+    double m_last_valid_heading_deg = 0.0;
+
+    double m_heading_ref_lat = 0.0;
+    double m_heading_ref_lon = 0.0;
 
     double current_spd=0.0;
 
-    // -- State Machine --
+    // State Machine
     State m_state;
-    // bool m_is_approaching_start = false;
-    // double m_closest_approach = 10.0;
-    // bool m_has_crossed_this_pass = false;
 
-    // -- Lap Data --
+    // Lap Data
     uint8_t m_lap_count = 0;
     uint32_t m_last_lap_time_ms = 0;
     uint32_t m_best_lap_time_ms = 0;
@@ -137,12 +153,12 @@ private:
     static constexpr size_t MAX_SECTORS = 10000;
 
     std::array<Sector, MAX_SECTORS> m_reference_lap_sectors;
-    size_t m_ref_sectors_count = 0; // Licznik, ile mamy aktualnie punktów
+    size_t m_ref_sectors_count = 0; // counter for the current reference lap sectors
 
     std::array<Sector, MAX_SECTORS> m_best_lap_sectors;
-    size_t m_best_sectors_count = 0; // Licznik dla najlepszego okrążenia
+    size_t m_best_sectors_count = 0; // counter for the best lap sectors, used for delta calculations
 
-    // -- Constants --
+    // Constants
     const double EARTH_RADIUS_M = 6371000.0;
     const double START_CENTER_LAT = 52.239048;    
     const double START_CENTER_LON = 16.230333;   
@@ -151,7 +167,7 @@ private:
     const double START_HEADING_DEG = 292.0; // This is the heading calculated from rosbag data for the start line (direction NW approximately) 
     //This need to be calculated based on the actual start line orientation. It can be calculated from the two gate posts or from the rosbag data as done here.
 
-    //Deratives for gate coridnations
+    // Deratives for gate coridnations
     double m_gate_p1_lat;
     double m_gate_p1_lon;
     double m_gate_p2_lat;
@@ -161,8 +177,8 @@ private:
     double m_prev_lat = 0.0;
     double m_prev_lon = 0.0;
 
-    // -- Utility Functions --
-    //Function to calculate gate post coordinates based on center point, heading and half width of the gate
+    // Utility Functions
+    // Function to calculate gate post coordinates based on center point, heading and half width of the gate
     void setup_gate_posts(double center_lat, double center_lon, double heading_deg, double half_width_m)
     {
         double lat_rad = degreesToRadians(center_lat);
@@ -199,18 +215,29 @@ private:
         return EARTH_RADIUS_M * c;
     }
 
-    // Funkcja pomocnicza: Iloczyn wektorowy (Cross Product)
+    // Calculate bearing from point 1 to point 2, used for determining the heading of the start line
+    double calculateBearing(double lat1, double lon1, double lat2, double lon2) 
+    {
+        double dLon = degreesToRadians(lon2 - lon1);
+        double y = sin(dLon) * cos(degreesToRadians(lat2));
+        double x = cos(degreesToRadians(lat1)) * sin(degreesToRadians(lat2)) -
+                   sin(degreesToRadians(lat1)) * cos(degreesToRadians(lat2)) * cos(dLon);
+        double brng = atan2(y, x) * 180.0 / M_PI;
+        if (brng < 0) brng += 360.0;
+        return brng;
+    }
+
+    // Calculates cross product to detect line intersection
     double crossProduct(double ax, double ay, double bx, double by, double cx, double cy)
     {
         return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
     }
 
-    // Sprawdza matematycznie czy przecięliśmy linię między P1 a P2
+    // Check if we have crossed the line defined by gate posts P1 and P2
     bool check_line_crossing(double curr_lat, double curr_lon)
     {
         if (m_prev_lat == 0.0 && m_prev_lon == 0.0) return false;
 
-        // Używamy dynamicznie wyliczonych punktów
         double p1_x = m_gate_p1_lon;
         double p1_y = m_gate_p1_lat;
         double p2_x = m_gate_p2_lon;
@@ -235,7 +262,7 @@ private:
         return false;
     }
 
-    // -- State Handlers --
+    // State Handlers
 
     void process_lap_crossing(const rclcpp::Time &now)
     {
@@ -295,7 +322,7 @@ private:
 
         if (lap_file_.is_open()) {
             lap_file_ << std::fixed << std::setprecision(10);
-            lap_file_ << "time_into_lap,lat,lon,speed,delta\n"; // Nagłówek dla nowego pliku
+            lap_file_ << "time_into_lap,lat,lon,speed,delta\n";
             RCLCPP_INFO(this->get_logger(), "Started logging new lap file: %s", ss.str().c_str());
         }
     }
@@ -405,6 +432,38 @@ private:
     }
 //Main callback for GPS data, handling state transitions and lap timing logic
 
+    void reset_gate_callback(const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
+                             std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+    {
+        if (m_last_valid_heading_deg == 0.0 || m_current_lat == 0.0)
+        {
+            response->success = false;
+            response->message = "Car hasn't moved yet! Drive forward 1-2 meters first.";
+            RCLCPP_ERROR(this->get_logger(), "Cannot reset gate: Drive forward first!");
+            return;
+        }
+
+        double heading_rad = degreesToRadians(m_last_valid_heading_deg);
+        double offset_m = 1.0; // offset in meters, to draw the gate in front of the car instead of behind
+
+        // Calculating new gate center coordinates based on current position, heading and offset
+        double gate_center_lat = m_current_lat + (offset_m * cos(heading_rad) / EARTH_RADIUS_M) * (180.0 / M_PI);
+        double gate_center_lon = m_current_lon + (offset_m * sin(heading_rad) / (EARTH_RADIUS_M * cos(degreesToRadians(m_current_lat)))) * (180.0 / M_PI);
+
+        setup_gate_posts(gate_center_lat, gate_center_lon, m_last_valid_heading_deg, 10.0);
+
+        m_state = State::WAITING_FOR_START;
+        m_lap_count = 0;
+        m_best_lap_time_ms = 0;
+        m_ref_sectors_count = 0;
+        m_best_sectors_count = 0;
+
+        if (lap_file_.is_open()) lap_file_.close(); 
+
+        response->success = true;
+        response->message = "Start Line Calibrated Successfully!";
+    }
+
     void vel_bd_callback(const geometry_msgs::msg::TwistWithCovarianceStamped::SharedPtr msg)
     {
         current_spd = msg->twist.twist.linear.x;
@@ -412,11 +471,34 @@ private:
 
     void gps_callback(const sensor_msgs::msg::NavSatFix::SharedPtr msg)
     {
-        double current_lat = msg->latitude;
-        double current_lon = msg->longitude;
+        m_current_lat = msg->latitude;
+        m_current_lon = msg->longitude;
+
+        double current_lat = m_current_lat;
+        double current_lon = m_current_lon;
         rclcpp::Time now = this->get_clock()->now();
 
-        //handle_start_finish_crossing(current_lat, current_lon, now);
+        if (m_heading_ref_lat == 0.0) 
+        {
+            // This is the first GPS frame, we set the anchor point for heading calculation
+            m_heading_ref_lat = current_lat;
+            m_heading_ref_lon = current_lon;
+        } 
+        else 
+        {
+            // Calculate distance from the last reference point for heading calculation, not from the previous GPS frame which can be very close in time and space
+            double dist = haversineDistance(m_heading_ref_lat, m_heading_ref_lon, current_lat, current_lon);
+            
+            if (dist > 1.0) 
+            {
+
+                m_last_valid_heading_deg = calculateBearing(m_heading_ref_lat, m_heading_ref_lon, current_lat, current_lon);
+                
+                m_heading_ref_lat = current_lat;
+                m_heading_ref_lon = current_lon;
+            }
+        }
+
         if (check_line_crossing(current_lat, current_lon))
         {
             process_lap_crossing(now);
@@ -425,6 +507,8 @@ private:
         switch (m_state)
         {
         case State::WAITING_FOR_START:
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000, 
+                "Status: WAITING... Drive to the start line.");
             break;
         case State::RECORDING_REFERENCE_LAP:
             state_recording_reference_lap(current_lat, current_lon, now);
