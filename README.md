@@ -117,6 +117,7 @@ ros2 run putm_lap_timer lap_timer
 ### Dynamic Start Line Calibration (Gate Reset)
 
 The LapTimer features a dynamic virtual start/finish line calibration that can be set anywhere on the track based on the car's current GPS position.
+
 **How to reset the start line:**
 
 To accurately calculate the gate orientation, the system needs to establish a motion vector. 
