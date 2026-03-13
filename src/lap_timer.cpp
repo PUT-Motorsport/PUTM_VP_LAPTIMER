@@ -48,7 +48,7 @@ private:
     const double DELTA_DISTANCE = 0.5;
 
     uint16_t last_lap = 0;
-    uint16_t best_lap = 0;
+    uint16_t best_lap_time_ms = 0;
 
     struct Sector
     {
@@ -189,15 +189,15 @@ private:
         int16_t u = static_cast<int16_t>(delta_time * 1000);
         message.best_lap = static_cast<int16_t>(56.234 * 1000);
         message.lap_counter = 14;
-        message.last_lap = static_cast<int16_t>(52.123 * 1000);
+        message.current_lap = static_cast<uint16_t>(52.123 * 1000);
         message.delta = u;
         lap_timer_pub->publish(message);
     }
 
     void convert_data()
     {
-        lap_time = static_cast < uint16_t > 1000 * (now - last_lap_time).seconds();
-        best_lap = static_cast < uint 16_t > 1000 * (best_lap_time_end - best_lap_time_start).seconds();
+        uint16_t lap_time = static_cast<uint16_t>(1000 * (this->now() - last_lap_time).seconds());
+        best_lap_time_ms = static_cast<uint16_t>(1000 * (best_lap_time_end - best_lap_time_start).seconds());
     }
 };
 
