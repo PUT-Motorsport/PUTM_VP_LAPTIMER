@@ -63,6 +63,30 @@ stateDiagram-v2
     LAPPING --> LAPPING: Subsequent line intersections
 ```
 
+** Mathematical Models & Algorithms **
+------------------------------
+
+To ensure high precision and reliability at racing speeds, the PUTM Lap Timer relies on several mathematical models to process raw GPS data. This section explains the core algorithms used in the node.
+
+### 1. Virtual Gate Generation (Spherical Offset)
+
+To detect a lap completion, the system creates a virtual Start/Finish line (a "gate") consisting of two posts (P1 and P2) perpendicular to the track's heading.
+
+Because GPS coordinates (Latitude/Longitude) are angular measurements, we cannot simply add meters to them. We use a spherical earth approximation where the Earth's radius is $R = 6371000$ meters.
+
+Given a center point ($Lat_{center}, Lon_{center}$), a heading angle $\theta$ (in radians), and a half-width $d$ (e.g., 10 meters), we first calculate the angle perpendicular to the car's direction:
+
+* For the left post (P1): $\alpha = \theta - 90^\circ$
+* For the right post (P2): $\alpha = \theta + 90^\circ$
+
+The absolute coordinates for the gate posts are calculated by adding the spherical offset to the center coordinates:
+
+$$Lat_{gate} = Lat_{center} + \left( \frac{d \cdot \cos(\alpha)}{R} \right) \cdot \frac{180}{\pi}$$
+
+$$Lon_{gate} = Lon_{center} + \left( \frac{d \cdot \sin(\alpha)}{R \cdot \cos(Lat_{center})} \right) \cdot \frac{180}{\pi}$$
+
+**Note:** The $\cos(Lat_{center})$ term in the longitude equation is crucial as it compensates for the shrinking distance between longitude lines as you move away from the equator.
+
 **Usage**
 -----
 
@@ -135,7 +159,6 @@ std_srvs.srv.Trigger_Response(success=True, message='Start Line Calibrated Succe
 The LapTimer will then reset the lap counters, close the active CSV log, and enter the WAITING_FOR_START mode until you cross the new line.
 **Troubleshooting:**
 If you receive success=False with the message "Car hasn't moved yet! Drive forward 1-2 meters first.", the vehicle hasn't traveled far enough from the GPS anchor point to calculate a heading vector. Drive a bit further forward and try again.
-
 
 **License**
 -------
