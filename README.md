@@ -63,7 +63,7 @@ stateDiagram-v2
     LAPPING --> LAPPING: Subsequent line intersections
 ```
 
-** Mathematical Models & Algorithms **
+**Mathematical Models & Algorithms**
 ------------------------------
 
 To ensure high precision and reliability at racing speeds, the PUTM Lap Timer relies on several mathematical models to process raw GPS data. This section explains the core algorithms used in the node.
@@ -86,6 +86,73 @@ $$Lat_{gate} = Lat_{center} + \left( \frac{d \cdot \cos(\alpha)}{R} \right) \cdo
 $$Lon_{gate} = Lon_{center} + \left( \frac{d \cdot \sin(\alpha)}{R \cdot \cos(Lat_{center})} \right) \cdot \frac{180}{\pi}$$
 
 **Note:** The $\cos(Lat_{center})$ term in the longitude equation is crucial as it compensates for the shrinking distance between longitude lines as you move away from the equator.
+
+### 2. Distance Calculation (Haversine Formula)
+
+To accurately calculate the distance between two sector points, the node uses the Haversine Formula, which determines the great-circle distance between two points on a sphere.
+
+
+
+For two points with latitudes $\phi_1, \phi_2$ and longitudes $\lambda_1, \lambda_2$ (all in radians), the distance $d$ is calculated as:
+
+$$a = \sin^2\left(\frac{\phi_2 - \phi_1}{2}\right) + \cos(\phi_1) \cdot \cos(\phi_2) \cdot \sin^2\left(\frac{\lambda_2 - \lambda_1}{2}\right)$$
+
+$$c = 2 \cdot \text{atan2}\left(\sqrt{a}, \sqrt{1-a}\right)$$
+
+$$d = R \cdot c$$
+
+Where $R$ is the Earth's radius ($6371000$ meters).
+
+**Implementation Note:** In the C++ code (`haversineDistance` function), the mathematical $\sin^2(x)$ is optimized for CPU performance as `sin(x) * sin(x)` instead of using the `pow()` function. Additionally, since the raw GPS data from the VectorNav sensor is provided in degrees, the `degreesToRadians()` function is used dynamically within the equation to satisfy the mathematical formula's strict requirement for radians. This calculation is primarily used to ensure sectors are recorded at strict spatial intervals (e.g., every 0.5 meters).
+
+### 3. Line Crossing Detection (Vector Cross Product)
+
+Detecting when the car crosses the Start/Finish line is not done by checking if the car is "inside" a radius (which causes false triggers). Instead, it uses a **Line Segment Intersection** algorithm based on 2D Vector Cross Products.
+
+
+
+We have two line segments:
+* **Segment 1 (The Gate):** From post $G_1$ to post $G_2$.
+* **Segment 2 (Car Path):** From the previous GPS coordinate $C_{prev}$ to the current GPS coordinate $C_{curr}$.
+
+To check if these segments intersect, we calculate the cross product of the vectors. The 2D cross product of three points $A, B, C$ tells us if point $C$ is to the left or right of the line forming $A \to B$:
+
+$$\text{cp} = (x_B - x_A)(y_C - y_A) - (y_B - y_A)(x_C - x_A)$$
+
+The algorithm checks if $C_{prev}$ and $C_{curr}$ are on *opposite sides* of the gate segment, AND if $G_1$ and $G_2$ are on *opposite sides* of the car's path segment. If both conditions are true (indicated by changing mathematical signs of the cross products), the car has strictly intersected the start/finish line.
+
+
+### 4. Dynamic Heading (Azimuth) Calculation
+
+When the `reset_gate` service is called, the system must orient the new gate perpendicular to the car's travel direction. The node tracks a heading reference point and waits until the car moves at least 1 meter. It then calculates the forward bearing using the following formulas:
+
+
+
+$$y = \sin(\Delta\lambda) \cdot \cos(\phi_2)$$
+
+$$x = \cos(\phi_1) \cdot \sin(\phi_2) - \sin(\phi_1) \cdot \cos(\phi_2) \cdot \cos(\Delta\lambda)$$
+
+$$\theta = \text{atan2}(y, x) \cdot \frac{180}{\pi}$$
+
+This ensures the gate is always properly laid across the track, regardless of where the vehicle is initialized.
+
+### 5. Live Delta Time (Nearest Neighbor Search)
+
+During the `LAPPING` state, the node provides live performance feedback (delta time).
+Rather than comparing times at strict geographic boundaries, the node stores a spatial array of the `best_lap` containing `[lat, lon, time_into_lap]`.
+
+
+
+For every new GPS ping on the current lap:
+1. It iterates through the `best_lap` array.
+2. It uses the Haversine formula to find the element with the absolute minimum spatial distance to the car's current coordinates.
+3. Once the closest "Ghost Car" point is found, it calculates:
+
+$$\Delta t = t_{current} - t_{best\_sector\_timestamp}$$
+
+If $\Delta t$ is negative, the current lap is faster (green sector). If positive, the lap is slower (red sector).
+
+
 
 **Usage**
 -----
