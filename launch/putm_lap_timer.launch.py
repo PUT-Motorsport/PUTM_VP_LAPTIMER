@@ -6,7 +6,7 @@ def generate_launch_description():
     return launch.LaunchDescription(
         [
             launch_ros.actions.Node(
-                package="putm_lap_timer", executable="lap_timer", name="lap_timer"
+                package="putm_lap_timer", executable="lap_timer", name="lap_timer", prefix=['taskset -c 3 ']
             )
         ]
     )

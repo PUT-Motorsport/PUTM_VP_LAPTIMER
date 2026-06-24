@@ -13,6 +13,8 @@
   <depend>geometry_msgs</depend>
   <depend>putm_vcl</depend>
   <depend>putm_vcl_interfaces</depend>
+  <depend>std_srvs</depend>
+
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
