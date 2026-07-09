@@ -12,11 +12,11 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
-# find_package(putm_vcl_interfaces REQUIRED)
+find_package(putm_vcl_interfaces REQUIRED)
 # find_package(putm_vcl REQUIRED)
 
 add_executable(lap_timer src/lap_timer.cpp)
-ament_target_dependencies(lap_timer rclcpp std_msgs sensor_msgs geometry_msgs std_srvs)  #putm_vcl_interfaces
+ament_target_dependencies(lap_timer rclcpp std_msgs sensor_msgs geometry_msgs std_srvs putm_vcl_interfaces)
 
 # uncomment the following section in order to fill in
 # further dependencies manually.
@@ -27,6 +27,19 @@ install(DIRECTORY launch DESTINATION share/${PROJECT_NAME}/)
 install(TARGETS
   lap_timer
   DESTINATION lib/${PROJECT_NAME})
+
+# --- SEKCJA TESTÓW JEDNOSTKOWYCH (AUTOMATYCZNY GTEST) ---
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  # Blokujemy restrykcyjne sprawdzanie komentarzy i copyrightów, żeby nie śmieciły w logach
+  set(ament_cmake_copyright_FOUND TRUE)
+  set(ament_cmake_cpplint_FOUND TRUE)
+  ament_lint_auto_find_test_dependencies()
+
+  # Dodanie Twojego testu jednostkowego
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_laptimer test/test_laptimer.cpp)
+endif()
 
 
 ament_package()
