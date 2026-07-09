@@ -1,0 +1,47 @@
+name: ROS 2 Humble CI
+
+on:
+  push:
+    branches: [FSM-rosbag-test]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-22.04
+    steps:
+      # 1. Instalacja środowiska ROS 2 Humble na maszynie GitHub Actions
+      - name: Setup ROS 2 Humble
+        uses: ros-tooling/setup-ros@v0.7
+        with:
+          required-ros-distributions: humble
+
+      # 2. Pobranie obecnego repozytorium (Lap Timer) do wirtualnego workspace
+      - name: Checkout putm_lap_timer
+        uses: actions/checkout@v4
+        with:
+          path: putm_ws/src/putm_lap_timer
+
+      # 3. Pobranie zewnętrznego repozytorium (VCL) z interfejsami (bo jest PUBLICZNE)
+      - name: Checkout putm_vcl (Dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: PUT-Motorsport/PUTM_VP_VCL
+          path: putm_ws/src/putm_vcl
+
+      # 4. Budowanie zależności i pakietu (dokładnie tak jak na Twoim laptopie)
+      - name: Build Workspace
+        run: |
+          source /opt/ros/humble/setup.bash
+          cd putm_ws
+          colcon build --packages-select putm_vcl_interfaces
+          source install/setup.bash
+          colcon build --packages-select putm_lap_timer --cmake-args -DBUILD_TESTING=ON
+
+      # 5. Uruchomienie GTestów i weryfikacja logiki matematycznej
+      - name: Run GTest Logic Validation
+        run: |
+          source /opt/ros/humble/setup.bash
+          cd putm_ws
+          source install/setup.bash
+          colcon test --packages-select putm_lap_timer --ctest-args -R test_laptimer --event-handlers console_cohesion+
