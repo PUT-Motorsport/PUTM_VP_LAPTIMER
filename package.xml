@@ -11,7 +11,6 @@
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
-  <depend>putm_vcl</depend>
   <depend>putm_vcl_interfaces</depend>
   <depend>std_srvs</depend>
 

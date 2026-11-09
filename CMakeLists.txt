@@ -12,7 +12,6 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(putm_vcl_interfaces REQUIRED)
-find_package(putm_vcl REQUIRED)
 find_package(std_srvs REQUIRED)
 
 add_executable(lap_timer src/lap_timer.cpp)
