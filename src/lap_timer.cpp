@@ -3,6 +3,7 @@
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/u_int16.hpp"
 #include "geometry_msgs/msg/vector3.hpp"
+#include "putm_vcl_interfaces/msg/lap_timer.hpp"
 #include "geometry_msgs/msg/twist_with_covariance_stamped.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include <cmath>
@@ -39,7 +40,7 @@ public:
         body_velocity_sub= this->create_subscription<geometry_msgs::msg::TwistWithCovarianceStamped>(
              "/vectornav/velocity_body", 10,std::bind(&LapTimer::vel_bd_callback, this, std::placeholders::_1));
 
-        lap_timer_pub_ = this->create_publisher<std_msgs::msg::String>("/putm_vcl/lap_timer", 50);
+        lap_timer_pub_ = this->create_publisher<putm_vcl_interfaces::msg::LapTimer>("/putm_vcl/lap_timer", 50);
 
         // Service to reset gate position, useful for testing and calibration without restarting the node
         reset_gate_srv_ = this->create_service<std_srvs::srv::Trigger>(
@@ -120,7 +121,7 @@ private:
     // Subscription to the GPS topic
     rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr gps_sub_;
     // Publisher for lap timer updates, which can be used by other nodes or for debugging
-    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr lap_timer_pub_;
+    rclcpp::Publisher<putm_vcl_interfaces::msg::LapTimer>::SharedPtr lap_timer_pub_;
     // Subscription to the body velocity topic, used for logging speed
     rclcpp::Subscription<geometry_msgs::msg::TwistWithCovarianceStamped>::SharedPtr body_velocity_sub;
     // Service to reset the gate position, allowing for dynamic recalibration during testing
@@ -543,15 +544,19 @@ private:
 
     void lap_timer_callback()
     {
-        auto message = std_msgs::msg::String();
-        std::stringstream ss;
-        ss << "best_lap:" << m_best_lap_time_ms
-           << ",lap_counter:" << static_cast<int>(m_lap_count)
-           << ",last_lap:" << m_last_lap_time_ms
-           << ",delta:" << static_cast<int32_t>(m_delta_time_s * 1000);
-        message.data = ss.str();
+        // Tworzenie wiadomości ROS 2
+        auto message = putm_vcl_interfaces::msg::LapTimer();
+        
+        message.delta = static_cast<int16_t>(m_delta_time_s * 1000.0); 
+        
+        // Przypisanie poprawnych zmiennych z klasy
+        message.current_lap = static_cast<uint16_t>(m_last_lap_time_ms); // lub czas trwania obecnego okrążenia, zależnie od logiki interfejsu
+        message.best_lap = static_cast<uint16_t>(m_best_lap_time_ms);
+        message.lap_counter = m_lap_count;
+
         lap_timer_pub_->publish(message);
     }
+
 };
 
 int main(int argc, char **argv)
