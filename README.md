@@ -192,6 +192,12 @@ Change the branch of the putm_vcl to 4motor:
 cd src/putm_vcl
 git checkout 4motor
 ```
+
+Change the branch of the PUTM_VP_LAPTIMER to dev:
+```
+cd putm_ws/src/putm_lap_timer
+git checkout dev
+```
 Build all the necesery packages for PUTM_VP_LAPTIMER and source the enviroment (you need to be in putm_ws directory):
 ```bash
 cd ~/putm_ws
