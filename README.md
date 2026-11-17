@@ -170,52 +170,58 @@ The package provides several configurable parameters:
 * `LAP_DISTANCE`: distance between start/finish line and sector points
 * `DELTA_DISTANCE`: minimum distance between sector points
 
-These parameters can be modified in the `lap_timer.cpp` file.
+These parameters can be modified in the core source files (e.g., `src/core/lap_timer.cpp` or relevant headers).
 
 
 **Testing**
 -------
-Clone the putm_ws repository with all the submodule (PUTM_VP_LAPTIMER needs putm_vcl_interfaces package): 
+Clone the repository: 
+```bash
+git clone https://github.com/PUT-Motorsport/PUTM_VP_LAPTIMER.git
+```
+
+Change branch to test branch
+
+```bash
+git checkout test
+```
+Build the putm_ws:
 ```bash
 git clone --recurse-submodules git@github.com:PUT-Motorsport/putm_ws.git
-```
-
-Change branch of the putm_ws repository to main branch
-
-```bash
 cd putm_ws
-git checkout main
+colcon build
 ```
+Run plotjuggler
 
-Change the branch of the putm_vcl to 4motor:
 ```bash
-cd src/putm_vcl
-git checkout 4motor
+ros2 run plotjuggler plotjuggler
 ```
+Open the .mcap (or .db3) file with metadata.yaml. Make sure that the "ROS2 Topic Re-Publisher" box is checked.
 
-Change the branch of the PUTM_VP_LAPTIMER to dev:
-```
-cd putm_ws/src/putm_lap_timer
-git checkout dev
-```
-Build all the necesery packages for PUTM_VP_LAPTIMER and source the enviroment (you need to be in putm_ws directory):
+Enter your built LapTimer workspace
 ```bash
 cd ~/putm_ws
-colcon build --packages-up-to putm_lap_timer
 source install/setup.bash
-```
-Then you need to run ros2 bag play and lap timer in two terminals (do not forget to source the environment in both terminals):
-
-Run the lap timer node in one terminal:
-```bash
 ros2 run putm_lap_timer lap_timer
 ```
+To playback the data, in another terminal run:
 
-and the plotjuggler or ros2 bag play in another terminal:
 ```bash
+
+cd ~/putm_ws
 source install/setup.bash
-ros2 run plotjuggler plotjuggler
 ros2 bag play <path_to_log_file> --disable-loan-message
+```
+Automated Unit Tests (GTest)
+
+This package is built using Test-Driven Development (TDD) principles and includes automated logic tests. To verify the core mechanics without running a rosbag, run the unit tests:
+
+```bash
+
+cd ~/putm_ws
+colcon build --packages-select putm_lap_timer
+source install/setup.bash
+colcon test --packages-select putm_lap_timer --event-handlers console_direct+
 ```
 
 ### Dynamic Start Line Calibration (Gate Reset)
